@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Chat App</title>
+  <title>Chat App Fixed</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -76,25 +76,6 @@
       background-color: #45a049;
     }
   </style>
-  <script type="module" src="app.js" defer></script>
-</head>
-<body>
-  <div id="login-section">
-    <h2>Login / Sign Up</h2>
-    <input id="email" type="email" placeholder="Email">
-    <input id="password" type="password" placeholder="Password">
-    <button id="loginBtn">Login</button>
-    <button id="signupBtn">Sign Up</button>
-  </div>
-
-  <div id="chat-section" style="display:none;">
-    <h2>Chat Room</h2>
-    <div id="messages"></div>
-    <input id="messageInput" placeholder="Type a message...">
-    <button id="sendBtn">Send</button>
-    <button id="logoutBtn">Logout</button>
-  </div>
-
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
     import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
@@ -124,6 +105,8 @@
     const messagesDiv = document.getElementById("messages");
     const messageInput = document.getElementById("messageInput");
 
+    let sendBtnHandlerAttached = false;
+
     document.getElementById("signupBtn").onclick = () => {
       createUserWithEmailAndPassword(auth, emailInput.value, passwordInput.value)
         .catch(err => alert(err.message));
@@ -138,13 +121,18 @@
       signOut(auth).catch(err => alert(err.message));
     };
 
+    let msgRef;
+
     onAuthStateChanged(auth, user => {
       if (user) {
         loginSection.style.display = "none";
         chatSection.style.display = "block";
 
-        const msgRef = ref(db, "messages");
+        messagesDiv.innerHTML = ''; // clear previous messages to prevent duplicates
 
+        msgRef = ref(db, "messages");
+
+        // Display messages
         onChildAdded(msgRef, data => {
           const msg = data.val();
           const msgElement = document.createElement("div");
@@ -156,33 +144,58 @@
 
           messagesDiv.appendChild(msgElement);
           messagesDiv.scrollTop = messagesDiv.scrollHeight;
+
+          // Auto-delete after 15 seconds
+          setTimeout(() => {
+            if (data.key) {
+              const delRef = ref(db, `messages/${data.key}`);
+              delRef.remove().catch(err => console.error("Failed to delete message:", err));
+            }
+          }, 15000);
         });
 
+        // Remove from DOM
         onChildRemoved(msgRef, data => {
           const removedMsg = document.getElementById(data.key);
           if (removedMsg) removedMsg.remove();
         });
 
-        document.getElementById("sendBtn").onclick = () => {
-          if (messageInput.value.trim() === "") return;
-
-          const newMsgRef = push(msgRef, {
-            user: user.email,
-            text: messageInput.value
-          });
-
-          messageInput.value = "";
-
-          setTimeout(() => {
-            newMsgRef.remove().catch(err => console.error("Failed to delete message:", err));
-          }, 15000);
-        };
+        // Attach send button handler only once
+        if (!sendBtnHandlerAttached) {
+          document.getElementById("sendBtn").onclick = () => {
+            if (messageInput.value.trim() === "") return;
+            push(msgRef, {
+              user: user.email,
+              text: messageInput.value
+            });
+            messageInput.value = "";
+          };
+          sendBtnHandlerAttached = true;
+        }
 
       } else {
         loginSection.style.display = "block";
         chatSection.style.display = "none";
+        sendBtnHandlerAttached = false; // reset handler flag on logout
       }
     });
   </script>
+</head>
+<body>
+  <div id="login-section">
+    <h2>Login / Sign Up</h2>
+    <input id="email" type="email" placeholder="Email">
+    <input id="password" type="password" placeholder="Password">
+    <button id="loginBtn">Login</button>
+    <button id="signupBtn">Sign Up</button>
+  </div>
+
+  <div id="chat-section" style="display:none;">
+    <h2>Chat Room</h2>
+    <div id="messages"></div>
+    <input id="messageInput" placeholder="Type a message...">
+    <button id="sendBtn">Send</button>
+    <button id="logoutBtn">Logout</button>
+  </div>
 </body>
 </html>
